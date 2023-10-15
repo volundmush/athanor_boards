@@ -1,3 +1,4 @@
+from collections import defaultdict
 from django.conf import settings
 from evennia.utils import class_from_module
 from evennia.utils.ansi import ANSIString
@@ -45,6 +46,42 @@ class CmdBcCreate(_CmdBcBase):
             kwargs={"name": self.rhs, "abbreviation": self.lhs},
         )
         req.execute()
+        message = req.results.get("message", "")
+        if message:
+            self.msg(message)
+
+
+class CmdBcDelete(_CmdBcBase):
+    """
+    Deletes a BBS Board Collection.
+
+    Syntax:
+        bcdelete <abbreviation>[=<name>]
+
+    The name must be provided if the Collection has boards, for extra verification.
+
+    WARNING: This will delete all boards and posts in the collection. There is no undo.
+    """
+    key = "bcdelete"
+
+    def func(self):
+        if not self.lhs:
+            self.msg("Usage: bcdelete <abbreviation>[=<name>]")
+            return
+
+        col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
+
+        req = Request(
+            target=col.objects,
+            user=self.caller,
+            character=self.character,
+            operation="delete",
+            kwargs={"validate": self.rhs, "collection_id": self.lhs},
+        )
+        req.execute()
+        message = req.results.get("message", "")
+        if message:
+            self.msg(message)
 
 
 class CmdBcList(_CmdBcBase):
@@ -74,7 +111,9 @@ class CmdBcList(_CmdBcBase):
             self.msg("No collections found.")
             return
 
-        t = self.caller.table("ID", "Abbr", "Name", "Locks")
+        out = list()
+        out.append(self.styled_header("BBS Board Collections"))
+        t = self.styled_table("ID", "Abbr", "Name", "Locks")
         t.reformat_column(0, width=7)
         t.reformat_column(1, width=10)
         t.reformat_column(2, width=20)
@@ -85,7 +124,8 @@ class CmdBcList(_CmdBcBase):
                 collection["db_key"],
                 collection["locks"],
             )
-        self.msg(str(t))
+        out.append(t)
+        self.msg_lines(out)
 
 
 class CmdBcRename(_CmdBcBase):
@@ -103,6 +143,9 @@ class CmdBcRename(_CmdBcBase):
             self.msg("Usage: bcrename <abbreviation>=<name>")
             return
 
+        if self.lhs.lower() == "none":
+            self.lhs = ""
+
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
         req = Request(
@@ -113,6 +156,7 @@ class CmdBcRename(_CmdBcBase):
             kwargs={"name": self.rhs, "collection_id": self.lhs},
         )
         req.execute()
+        self.request_message(req)
 
 
 class CmdBcAbbreviate(_CmdBcBase):
@@ -130,6 +174,9 @@ class CmdBcAbbreviate(_CmdBcBase):
             self.msg("Usage: bcabbrev <abbreviation>=<new abbreviation>")
             return
 
+        if self.lhs.lower() == "none":
+            self.lhs = ""
+
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
         req = Request(
@@ -140,10 +187,45 @@ class CmdBcAbbreviate(_CmdBcBase):
             kwargs={"abbreviation": self.rhs, "collection_id": self.lhs},
         )
         req.execute()
+        self.request_message(req)
 
 
 class CmdBcLock(_CmdBcBase):
+    """
+    Alters locks on a BBS Board Collection.
+
+    Syntax:
+        bclock <abbreviation>=<lockstring>
+
+    Lockstrings must be valid Evennia lockstrings.
+    See help lock for more information.
+
+    Locks:
+        read - Who can see the collection and its boards.
+        admin - Who can modify the collection.
+            (Add/Delete/Rename boards, etc.)
+    """
     key = "bclock"
+
+    def func(self):
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bclock <abbreviation>=<lockstring>")
+            return
+
+        if self.lhs.lower() == "none":
+            self.lhs = ""
+
+        col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
+
+        req = Request(
+            target=col.objects,
+            user=self.caller,
+            character=self.character,
+            operation="lock",
+            kwargs={"lockstring": self.rhs, "collection_id": self.lhs},
+        )
+        req.execute()
+        self.request_message(req)
 
 
 class CmdBcDelete(_CmdBcBase):
@@ -220,6 +302,7 @@ class CmdBbPost(_CmdBbBase):
             return
 
         board_id, subject = self.lhs.split("/", 1)
+        board_id = board_id.strip()
 
         req = Request(
             target=Post.objects,
@@ -229,3 +312,199 @@ class CmdBbPost(_CmdBbBase):
             kwargs={"board_id": board_id, "subject": subject, "body": self.rhs},
         )
         req.execute()
+
+
+class CmdBbReply(_CmdBbBase):
+    """
+    Reply to a message on a BBS Board.
+
+    Syntax:
+        bbreply <board id>/<post id>=<message>
+    """
+    key = "bbreply"
+
+    def func(self):
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bbreply <board id>/<post id>=<message>")
+            return
+
+        if "/" not in self.lhs:
+            self.msg("Usage: bbreply <board id>/<post id>=<message>")
+            return
+
+        board_id, post_id = self.lhs.split("/", 1)
+        board_id = board_id.strip()
+        post_id = post_id.strip()
+
+        req = Request(
+            target=Post.objects,
+            user=self.caller,
+            character=self.character,
+            operation="reply",
+            kwargs={"board_id": board_id, "post_id": post_id, "body": self.rhs},
+        )
+        req.execute()
+
+
+class CmdBbList(_CmdBbBase):
+    """
+    List all BBS Boards.
+
+    Syntax:
+        bblist
+    """
+    key = "bblist"
+
+    def func(self):
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        req = Request(
+            target=b.objects,
+            user=self.caller,
+            character=self.character,
+            operation="list",
+        )
+        req.execute()
+
+        data = req.results.get("boards", list())
+        if not data:
+            self.msg("No boards found.")
+            return
+
+        out = list()
+        out.append(self.styled_header(f"BBS - {settings.SERVERNAME}"))
+
+        board_collections = defaultdict(list)
+        for board in data:
+            board_collections[board["collection_name"]].append(board)
+
+        def format_table(table):
+            table.reformat_column(0, width=10)
+            table.reformat_column(1, width=25)
+            #table.reformat_column(2, width=20)
+
+        for collection, boards in board_collections.items():
+            out.append(self.styled_separator(collection))
+            t = self.styled_table("ID", "Name", "Locks", header=False)
+            format_table(t)
+            for board in boards:
+                t.add_row(board["board_id"], board["db_key"], board["locks"])
+            out.append(t)
+
+        self.msg_lines(out)
+
+
+class CmdBbRead(_CmdBbBase):
+    """
+    Read a BBS Board.
+
+    Syntax:
+        bbread
+        bbread <board id>
+        bbread <board id>/<post id>
+
+    If no board id is provided, a list of all boards will be displayed.
+    If a board id is provided, a list of all posts on that board will be displayed.
+    If a post id is provided, the post will be displayed.
+    """
+    key = "bbread"
+
+    def list_all_boards(self):
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        req = Request(
+            target=b.objects,
+            user=self.caller,
+            character=self.character,
+            operation="list",
+        )
+        req.execute()
+
+        data = req.results.get("boards", list())
+        if not data:
+            self.msg("No boards found.")
+            return
+
+        out = list()
+        out.append(self.styled_header(f"BBS - {settings.SERVERNAME}"))
+
+        board_collections = defaultdict(list)
+        for board in data:
+            board_collections[board["collection_name"]].append(board)
+
+        def format_table(table):
+            table.reformat_column(0, width=10)
+            table.reformat_column(1, width=25)
+            table.reformat_column(2, width=15)
+
+        for collection, boards in board_collections.items():
+            out.append(self.styled_separator(collection))
+            t = self.styled_table("ID", "Name", "Last Post", "#Msg", "#Unr", "Perm")
+            format_table(t)
+            for board in boards:
+                perm = "R" if board["read_perm"] else " "
+                perm += "P" if board["post_perm"] else " "
+                perm += "A" if board["admin_perm"] else " "
+                t.add_row(board["board_id"], board["db_key"], self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
+                          board["post_count"],
+                          board["unread_count"], perm)
+            out.append(t)
+
+        self.msg_lines(out)
+
+    def list_board_posts(self):
+        req = Request(
+            target=Post.objects,
+            user=self.caller,
+            character=self.character,
+            operation="list",
+            kwargs={"board_id": self.args},
+        )
+        req.execute()
+
+        data = req.results.get("posts", list())
+        if not data:
+            self.msg("No posts found.")
+            return
+
+        board = req.results.get("board")
+
+        out = list()
+        out.append(self.styled_header(f"{settings.SERVERNAME} BBS - {board['board_id']}: {board['db_key']}"))
+        t = self.styled_table("ID", "Rd", "Subject", "Date", "Author")
+        t.reformat_column(0, width=12)
+        t.reformat_column(1, width=5)
+        t.reformat_column(3, width=15)
+        for post in data:
+            t.add_row(f"{post['board_id']}/{post['post_number']}", 'Y' if post["read"] else 'N',
+                      post["subject"], self.account.datetime_format(post["date_created"], template="%b %d %Y"),
+                      post["author"])
+        out.append(t)
+        self.msg_lines(out)
+
+    def func(self):
+        if not self.args:
+            self.list_all_boards()
+            return
+
+        if "/" not in self.args:
+            self.list_board_posts()
+            return
+
+        board_id, post_id = self.args.split("/", 1)
+        board_id = board_id.strip()
+        post_id = post_id.strip()
+
+        req = Request(
+            target=Post.objects,
+            user=self.caller,
+            character=self.character,
+            operation="read",
+            kwargs={"board_id": board_id, "post_id": post_id},
+        )
+        req.execute()
+
+        data = req.results.get("post", None)
+        if not data:
+            self.msg("No post found.")
+            return
