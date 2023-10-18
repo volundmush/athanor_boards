@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from evennia.typeclasses.models import TypedObject
+from athanor.utils import utcnow
 from .managers import BoardDBManager, CollectionDBManager, PostManager
 
 
@@ -33,7 +34,7 @@ class BoardDB(TypedObject):
 
     db_config = models.JSONField(null=False, default=dict)
     db_next_post_number = models.IntegerField(default=1, null=False)
-    db_last_activity = models.DateTimeField(null=False)
+    db_last_activity = models.DateTimeField(null=False, default=utcnow)
 
     class Meta:
         unique_together = (("db_collection", "db_key"), ("db_collection", "db_order"))
@@ -54,8 +55,8 @@ class Post(models.Model):
 
     subject = models.CharField(max_length=255, null=False)
 
-    date_created = models.DateTimeField(null=False)
-    date_modified = models.DateTimeField(null=False)
+    date_created = models.DateTimeField(null=False, default=utcnow)
+    date_modified = models.DateTimeField(null=False, default=utcnow)
 
     body = models.TextField(null=False)
 

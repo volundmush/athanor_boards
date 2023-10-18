@@ -38,10 +38,8 @@ class CmdBcCreate(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="create",
             kwargs={"name": self.rhs, "abbreviation": self.lhs},
         )
@@ -71,10 +69,8 @@ class CmdBcDelete(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="delete",
             kwargs={"validate": self.rhs, "collection_id": self.lhs},
         )
@@ -97,10 +93,8 @@ class CmdBcList(_CmdBcBase):
     def func(self):
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="list",
         )
 
@@ -148,10 +142,8 @@ class CmdBcRename(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="rename",
             kwargs={"name": self.rhs, "collection_id": self.lhs},
         )
@@ -179,10 +171,8 @@ class CmdBcAbbreviate(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="rename",
             kwargs={"abbreviation": self.rhs, "collection_id": self.lhs},
         )
@@ -217,10 +207,8 @@ class CmdBcLock(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=col.objects,
-            user=self.caller,
-            character=self.character,
             operation="lock",
             kwargs={"lockstring": self.rhs, "collection_id": self.lhs},
         )
@@ -265,10 +253,8 @@ class CmdBbCreate(_CmdBbBase):
         if order is not None:
             kwargs["order"] = order
 
-        req = Request(
+        req = self.request(
             target=b.objects,
-            user=self.caller,
-            character=self.character,
             operation="create",
             kwargs=kwargs,
         )
@@ -304,10 +290,8 @@ class CmdBbPost(_CmdBbBase):
         board_id, subject = self.lhs.split("/", 1)
         board_id = board_id.strip()
 
-        req = Request(
+        req = self.request(
             target=Post.objects,
-            user=self.caller,
-            character=self.character,
             operation="create",
             kwargs={"board_id": board_id, "subject": subject, "body": self.rhs},
         )
@@ -336,10 +320,8 @@ class CmdBbReply(_CmdBbBase):
         board_id = board_id.strip()
         post_id = post_id.strip()
 
-        req = Request(
+        req = self.request(
             target=Post.objects,
-            user=self.caller,
-            character=self.character,
             operation="reply",
             kwargs={"board_id": board_id, "post_id": post_id, "body": self.rhs},
         )
@@ -358,10 +340,8 @@ class CmdBbList(_CmdBbBase):
     def func(self):
         b = class_from_module(settings.BASE_BOARD_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=b.objects,
-            user=self.caller,
-            character=self.character,
             operation="list",
         )
         req.execute()
@@ -372,26 +352,18 @@ class CmdBbList(_CmdBbBase):
             return
 
         out = list()
-        out.append(self.styled_header(f"BBS - {settings.SERVERNAME}"))
 
         board_collections = defaultdict(list)
         for board in data:
             board_collections[board["collection_name"]].append(board)
 
-        def format_table(table):
-            table.reformat_column(0, width=10)
-            table.reformat_column(1, width=25)
-            #table.reformat_column(2, width=20)
-
         for collection, boards in board_collections.items():
-            out.append(self.styled_separator(collection))
-            t = self.styled_table("ID", "Name", "Locks", header=False)
-            format_table(t)
+            t = self.rich_table("ID", "Name", "Locks", title=collection)
             for board in boards:
                 t.add_row(board["board_id"], board["db_key"], board["locks"])
             out.append(t)
 
-        self.msg_lines(out)
+        self.msg_group(*out)
 
 
 class CmdBbRead(_CmdBbBase):
@@ -412,10 +384,8 @@ class CmdBbRead(_CmdBbBase):
     def list_all_boards(self):
         b = class_from_module(settings.BASE_BOARD_TYPECLASS)
 
-        req = Request(
+        req = self.request(
             target=b.objects,
-            user=self.caller,
-            character=self.character,
             operation="list",
         )
         req.execute()
@@ -426,37 +396,27 @@ class CmdBbRead(_CmdBbBase):
             return
 
         out = list()
-        out.append(self.styled_header(f"BBS - {settings.SERVERNAME}"))
 
         board_collections = defaultdict(list)
         for board in data:
             board_collections[board["collection_name"]].append(board)
 
-        def format_table(table):
-            table.reformat_column(0, width=10)
-            table.reformat_column(1, width=25)
-            table.reformat_column(2, width=15)
-
         for collection, boards in board_collections.items():
-            out.append(self.styled_separator(collection))
-            t = self.styled_table("ID", "Name", "Last Post", "#Msg", "#Unr", "Perm")
-            format_table(t)
+            t = self.rich_table("ID", "Name", "Last Post", "#Msg", "#Unr", "Perm", title=collection)
             for board in boards:
                 perm = "R" if board["read_perm"] else " "
                 perm += "P" if board["post_perm"] else " "
                 perm += "A" if board["admin_perm"] else " "
-                t.add_row(board["board_id"], board["db_key"], self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
-                          board["post_count"],
-                          board["unread_count"], perm)
+                t.add_row(str(board["board_id"]), board["db_key"], self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
+                          str(board["post_count"]),
+                          str(board["unread_count"]), perm)
             out.append(t)
 
-        self.msg_lines(out)
+        self.msg_group(*out)
 
     def list_board_posts(self):
-        req = Request(
+        req = self.request(
             target=Post.objects,
-            user=self.caller,
-            character=self.character,
             operation="list",
             kwargs={"board_id": self.args},
         )
@@ -470,17 +430,13 @@ class CmdBbRead(_CmdBbBase):
         board = req.results.get("board")
 
         out = list()
-        out.append(self.styled_header(f"{settings.SERVERNAME} BBS - {board['board_id']}: {board['db_key']}"))
-        t = self.styled_table("ID", "Rd", "Subject", "Date", "Author")
-        t.reformat_column(0, width=12)
-        t.reformat_column(1, width=5)
-        t.reformat_column(3, width=15)
+        t = self.rich_table("ID", "Rd", "Subject", "Date", "Author", title=f"{board['collection_name']} Board {board['board_id']}: {board['db_key']}")
         for post in data:
             t.add_row(f"{post['board_id']}/{post['post_number']}", 'Y' if post["read"] else 'N',
                       post["subject"], self.account.datetime_format(post["date_created"], template="%b %d %Y"),
                       post["author"])
         out.append(t)
-        self.msg_lines(out)
+        self.msg_group(*out)
 
     def func(self):
         if not self.args:
@@ -495,10 +451,8 @@ class CmdBbRead(_CmdBbBase):
         board_id = board_id.strip()
         post_id = post_id.strip()
 
-        req = Request(
+        req = self.request(
             target=Post.objects,
-            user=self.caller,
-            character=self.character,
             operation="read",
             kwargs={"board_id": board_id, "post_id": post_id},
         )

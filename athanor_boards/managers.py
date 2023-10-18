@@ -1,5 +1,4 @@
 import re
-import datetime
 from django.db import IntegrityError, transaction
 from django.db import models
 from django.db.models.functions import Concat
@@ -7,7 +6,8 @@ from django.conf import settings
 from evennia.typeclasses.managers import TypeclassManager, TypedObjectManager
 from evennia.utils import class_from_module
 
-from athanor.utils import Request, validate_name, online_accounts, online_characters, staff_alert
+
+from athanor.utils import Request, validate_name, online_accounts, online_characters, staff_alert, utcnow
 
 _RE_ABBREV = re.compile(r"^[a-zA-Z]{1,10}$")
 
@@ -331,14 +331,11 @@ class PostManager(models.Manager):
             kwargs["disguise"] = disguise
 
         kwargs["number"] = board.next_post_number
-        now = datetime.datetime.now()
-        kwargs["date_created"] = now
-        kwargs["date_modified"] = now
 
         with transaction.atomic():
             post = self.create(**kwargs)
             post.read.add(request.user)
-            board.last_activity = now
+            board.last_activity = post.date_created
             board.next_post_number += 1
 
         targets = online_characters() if ic else online_accounts()
@@ -414,7 +411,7 @@ class PostManager(models.Manager):
         if disguise:
             disguise = disguise.strip()
 
-        now = datetime.datetime.now()
+        now = utcnow()
         kwargs = {"board": board, "subject": f"RE: {post.subject}", "body": body, "user": request.user,
                   "number": post.number, "date_created": now, "date_modified": now}
 
