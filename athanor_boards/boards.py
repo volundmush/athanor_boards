@@ -1,4 +1,3 @@
-import re
 from django.conf import settings
 from evennia.typeclasses.models import TypeclassBase
 from evennia.utils.utils import lazy_property
@@ -35,14 +34,18 @@ class DefaultBoardCollection(BoardCollectionDB, metaclass=TypeclassBase):
             load_kwargs={"category": "option"},
         )
 
+    def check_perm(self, enactor, perm):
+        if perm != "admin":
+            return self.access(enactor, perm) or self.access(enactor, "admin") or enactor.is_admin()
+        return self.access(enactor, perm) or enactor.is_admin()
+
 
 class DefaultBoard(BoardDB, metaclass=TypeclassBase):
     system_name = "BBS"
     objects = BoardManager()
-    init_locks = "read:all();post:all();admin:perm(Admin)"
 
     def at_first_save(self):
-        self.locks.add(self.init_locks)
+        self.locks.add(self.collection.options.get("default_locks"))
 
     @property
     def board_label(self):
@@ -59,6 +62,7 @@ class DefaultBoard(BoardDB, metaclass=TypeclassBase):
             "db_next_post_number": self.db_next_post_number,
             "db_last_activity": self.db_last_activity,
             "locks": self.db_lock_storage,
+            "post_count": self.posts.filter(deleted=False).count(),
         }
 
     @lazy_property
@@ -71,3 +75,10 @@ class DefaultBoard(BoardDB, metaclass=TypeclassBase):
             save_kwargs={"category": "option"},
             load_kwargs={"category": "option"},
         )
+
+    def check_perm(self, enactor, perm):
+        if self.collection.access(enactor, "admin"):
+            return True
+        if perm != "admin":
+            return self.access(enactor, perm) or self.access(enactor, "admin") or enactor.is_admin()
+        return self.access(enactor, perm) or enactor.is_admin()

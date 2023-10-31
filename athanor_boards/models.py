@@ -12,11 +12,13 @@ class BoardCollectionDB(TypedObject):
     __defaultclasspath__ = "athanor_boards.boards.DefaultBoardCollection"
     __applabel__ = "athanor_boards"
 
-    db_key = models.CharField("key", max_length=255, unique=True)
+    db_key = models.CharField(max_length=255, unique=True, null=False, blank=True)
     db_abbreviation = models.CharField(
-        max_length=30, unique=True, null=False, blank=True
+        max_length=30, null=False, blank=True, unique=True
     )
     db_config = models.JSONField(null=False, default=dict)
+
+    db_deleted = models.BooleanField(default=False)
 
 
 class BoardDB(TypedObject):
@@ -35,6 +37,8 @@ class BoardDB(TypedObject):
     db_config = models.JSONField(null=False, default=dict)
     db_next_post_number = models.IntegerField(default=1, null=False)
     db_last_activity = models.DateTimeField(null=False, default=utcnow)
+
+    db_deleted = models.BooleanField(default=False)
 
     class Meta:
         unique_together = (("db_collection", "db_key"), ("db_collection", "db_order"))
@@ -61,6 +65,8 @@ class Post(models.Model):
     body = models.TextField(null=False)
 
     read = models.ManyToManyField("accounts.AccountDB", related_name="read_posts")
+
+    deleted = models.BooleanField(default=False)
 
     class Meta:
         unique_together = (("board", "number", "reply_number"),)

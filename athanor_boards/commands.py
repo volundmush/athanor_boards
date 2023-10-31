@@ -1,9 +1,7 @@
 from collections import defaultdict
 from django.conf import settings
 from evennia.utils import class_from_module
-from evennia.utils.ansi import ANSIString
 
-from athanor.utils import Request
 from athanor.commands import AthanorAccountCommand
 
 from .models import Post
@@ -38,15 +36,13 @@ class CmdBcCreate(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="create",
             kwargs={"name": self.rhs, "abbreviation": self.lhs},
         )
-        req.execute()
-        message = req.results.get("message", "")
-        if message:
-            self.msg(message)
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBcDelete(_CmdBcBase):
@@ -69,15 +65,13 @@ class CmdBcDelete(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="delete",
             kwargs={"validate": self.rhs, "collection_id": self.lhs},
         )
-        req.execute()
-        message = req.results.get("message", "")
-        if message:
-            self.msg(message)
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBcList(_CmdBcBase):
@@ -93,33 +87,28 @@ class CmdBcList(_CmdBcBase):
     def func(self):
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="list",
         )
+        op.execute()
+        if not op.results.get("success", False):
+            self.op_message(op)
+            return
 
-        req.execute()
-
-        data = req.results.get("collections", list())
-        if not data:
+        if not (data := op.results.get("collections", list())):
             self.msg("No collections found.")
             return
 
-        out = list()
-        out.append(self.styled_header("BBS Board Collections"))
-        t = self.styled_table("ID", "Abbr", "Name", "Locks")
-        t.reformat_column(0, width=7)
-        t.reformat_column(1, width=10)
-        t.reformat_column(2, width=20)
+        t = self.rich_table("ID", "Abbr", "Name", "Locks", title="BBS Board Collections")
         for collection in data:
             t.add_row(
-                collection["id"],
+                str(collection["id"]),
                 collection["db_abbreviation"],
                 collection["db_key"],
                 collection["locks"],
             )
-        out.append(t)
-        self.msg_lines(out)
+        self.buffer.append(t)
 
 
 class CmdBcRename(_CmdBcBase):
@@ -142,13 +131,85 @@ class CmdBcRename(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="rename",
             kwargs={"name": self.rhs, "collection_id": self.lhs},
         )
-        req.execute()
-        self.request_message(req)
+        op.execute()
+        self.op_message(op)
+
+
+class CmdBcConfig(_CmdBcBase):
+    """
+    Configure a BBS Board Collection.
+
+    Syntax:
+        bcconfig <abbreviation>
+        bcconfig <abbreviation>/<key>=<value>
+
+    If no key is provided, the current configuration will be displayed.
+    If a key is provided, the configuration will be updated.
+    """
+    key = "bcconfig"
+
+    def func(self):
+        if not self.lhs:
+            self.msg("Usage: bcconfig <abbreviation>[/<key>=<value>]")
+            return
+
+        abbr = None
+        key = None
+        value = self.rhs
+        if "/" in self.lhs:
+            abbr, key = self.lhs.split("/", 1)
+        else:
+            abbr = self.lhs
+
+        if abbr.lower() == "none":
+            abbr = ""
+
+        if key is not None:
+            self.update_config(abbr, key, value)
+        else:
+            self.display_config(abbr)
+
+    def update_config(self, abbr: str, key: str, value: str):
+        col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
+
+        op = self.operation(
+            target=col.objects,
+            operation="config_set",
+            kwargs={"collection_id": abbr, "key": key, "value": value},
+        )
+        op.execute()
+        self.op_message(op)
+
+    def display_config(self, abbr: str):
+        col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
+
+        op = self.operation(
+            target=col.objects,
+            operation="config_list",
+            kwargs={"collection_id": abbr},
+        )
+        op.execute()
+
+        if not op.results.get("success", False):
+            self.op_message(op)
+            return
+
+        if not (data := op.results.get("config", list())):
+            self.msg("No configuration found.")
+            return
+
+        c = op.results.get("collection")
+
+        t = self.rich_table("Name", "Description", "Type", "Value",
+                            title=f"'{c['db_abbreviation']}: {c['db_key']}' Config Options")
+        for config in data:
+            t.add_row(config["name"], config["description"], config["type"], config["value"])
+        self.buffer.append(t)
 
 
 class CmdBcAbbreviate(_CmdBcBase):
@@ -171,13 +232,13 @@ class CmdBcAbbreviate(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="rename",
             kwargs={"abbreviation": self.rhs, "collection_id": self.lhs},
         )
-        req.execute()
-        self.request_message(req)
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBcLock(_CmdBcBase):
@@ -207,13 +268,13 @@ class CmdBcLock(_CmdBcBase):
 
         col = class_from_module(settings.BASE_BOARD_COLLECTION_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=col.objects,
             operation="lock",
             kwargs={"lockstring": self.rhs, "collection_id": self.lhs},
         )
-        req.execute()
-        self.request_message(req)
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBcDelete(_CmdBcBase):
@@ -231,7 +292,6 @@ class CmdBbCreate(_CmdBbBase):
     Syntax:
         bbcreate <collection abbreviation>[/<order>]=<name>
     """
-
     key = "bbcreate"
 
     def func(self):
@@ -253,12 +313,14 @@ class CmdBbCreate(_CmdBbBase):
         if order is not None:
             kwargs["order"] = order
 
-        req = self.request(
+        op = self.operation(
             target=b.objects,
             operation="create",
             kwargs=kwargs,
         )
-        req.execute()
+        op.execute()
+
+        self.op_message(op)
 
 
 class CmdBbRename(_CmdBbBase):
@@ -290,12 +352,14 @@ class CmdBbPost(_CmdBbBase):
         board_id, subject = self.lhs.split("/", 1)
         board_id = board_id.strip()
 
-        req = self.request(
+        op = self.operation(
             target=Post.objects,
             operation="create",
             kwargs={"board_id": board_id, "subject": subject, "body": self.rhs},
         )
-        req.execute()
+        op.execute()
+
+        self.op_message(op)
 
 
 class CmdBbReply(_CmdBbBase):
@@ -320,12 +384,14 @@ class CmdBbReply(_CmdBbBase):
         board_id = board_id.strip()
         post_id = post_id.strip()
 
-        req = self.request(
+        op = self.operation(
             target=Post.objects,
             operation="reply",
             kwargs={"board_id": board_id, "post_id": post_id, "body": self.rhs},
         )
-        req.execute()
+        op.execute()
+
+        self.op_message(op)
 
 
 class CmdBbList(_CmdBbBase):
@@ -340,18 +406,19 @@ class CmdBbList(_CmdBbBase):
     def func(self):
         b = class_from_module(settings.BASE_BOARD_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=b.objects,
             operation="list",
         )
-        req.execute()
+        op.execute()
 
-        data = req.results.get("boards", list())
-        if not data:
-            self.msg("No boards found.")
+        if not op.results.get("success", False):
+            self.op_message(op)
             return
 
-        out = list()
+        if not (data := op.results.get("boards", list())):
+            self.msg("No boards found.")
+            return
 
         board_collections = defaultdict(list)
         for board in data:
@@ -361,9 +428,7 @@ class CmdBbList(_CmdBbBase):
             t = self.rich_table("ID", "Name", "Locks", title=collection)
             for board in boards:
                 t.add_row(board["board_id"], board["db_key"], board["locks"])
-            out.append(t)
-
-        self.msg_group(*out)
+            self.buffer.append(t)
 
 
 class CmdBbRead(_CmdBbBase):
@@ -372,7 +437,7 @@ class CmdBbRead(_CmdBbBase):
 
     Syntax:
         bbread
-        bbread <board id>
+        bbread <board id>[.<page>]
         bbread <board id>/<post id>
 
     If no board id is provided, a list of all boards will be displayed.
@@ -384,18 +449,19 @@ class CmdBbRead(_CmdBbBase):
     def list_all_boards(self):
         b = class_from_module(settings.BASE_BOARD_TYPECLASS)
 
-        req = self.request(
+        op = self.operation(
             target=b.objects,
             operation="list",
         )
-        req.execute()
+        op.execute()
 
-        data = req.results.get("boards", list())
-        if not data:
-            self.msg("No boards found.")
+        if not op.results.get("success", False):
+            self.op_message(op)
             return
 
-        out = list()
+        if not (data := op.results.get("boards", list())):
+            self.msg("No boards found.")
+            return
 
         board_collections = defaultdict(list)
         for board in data:
@@ -407,38 +473,43 @@ class CmdBbRead(_CmdBbBase):
                 perm = "R" if board["read_perm"] else " "
                 perm += "P" if board["post_perm"] else " "
                 perm += "A" if board["admin_perm"] else " "
-                t.add_row(str(board["board_id"]), board["db_key"], self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
+                t.add_row(str(board["board_id"]), board["db_key"],
+                          self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
                           str(board["post_count"]),
                           str(board["unread_count"]), perm)
-            out.append(t)
-
-        self.msg_group(*out)
+            self.buffer.append(t)
 
     def list_board_posts(self):
-        req = self.request(
+        op = self.operation(
             target=Post.objects,
             operation="list",
-            kwargs={"board_id": self.args},
+            kwargs={"board_id": self.args, "posts_per_page": 50},
         )
-        req.execute()
+        op.execute()
 
-        data = req.results.get("posts", list())
-        if not data:
+        if not op.results.get("success", False):
+            self.op_message(op)
+            return
+
+        if not (data := op.results.get("posts", list())):
             self.msg("No posts found.")
             return
 
-        board = req.results.get("board")
+        board = op.results.get("board")
+        page = op.results.get("page")
+        pages = op.results.get("pages")
 
-        out = list()
-        t = self.rich_table("ID", "Rd", "Subject", "Date", "Author", title=f"{board['collection_name']} Board {board['board_id']}: {board['db_key']}")
+        page_display = f"(Page {page} of {pages})"
+        t = self.rich_table("ID", "Rd", "Subject", "Date", "Author",
+                            title=f"{board['collection_name']} Board {board['board_id']}: {board['db_key']} {page_display}", )
         for post in data:
             t.add_row(f"{post['board_id']}/{post['post_number']}", 'Y' if post["read"] else 'N',
                       post["subject"], self.account.datetime_format(post["date_created"], template="%b %d %Y"),
                       post["author"])
-        out.append(t)
-        self.msg_group(*out)
+        self.buffer.append(t)
 
     def func(self):
+
         if not self.args:
             self.list_all_boards()
             return
@@ -451,14 +522,104 @@ class CmdBbRead(_CmdBbBase):
         board_id = board_id.strip()
         post_id = post_id.strip()
 
-        req = self.request(
+        op = self.operation(
             target=Post.objects,
             operation="read",
             kwargs={"board_id": board_id, "post_id": post_id},
         )
-        req.execute()
+        op.execute()
 
-        data = req.results.get("post", None)
-        if not data:
+        if not op.results.get("success", False):
+            self.op_message(op)
+            return
+
+        if not (post := op.results.get("post", None)):
             self.msg("No post found.")
             return
+
+        t = self.rich_table(
+            title=f"{post['board_name']} Board Post {post['board_id']}/{post['post_number']}: {post['subject']}",
+            show_lines=True,
+            show_header=False)
+        t.add_column()
+
+        header = list()
+        # we want the header to be lines of relevant information...
+        header.append(f"{'Author:':>7} {post['author']:<20}")
+        header.append(f"{'Date:':>7} {self.account.datetime_format(post['date_created'], template='%c'):<20}")
+
+        t.add_row("\n".join(header))
+        t.add_row(post["body"])
+
+        self.buffer.append(t)
+
+
+
+class CmdBbConfig(_CmdBbBase):
+    """
+    Configure a BBS Board.
+
+    Syntax:
+        bbconfig <board>
+        bbconfig <board>/<key>=<value>
+
+    If no key is provided, the current configuration will be displayed.
+    If a key is provided, the configuration will be updated.
+    """
+    key = "bbconfig"
+
+    def func(self):
+        if not self.lhs:
+            self.msg("Usage: bbconfig <board>[/<key>=<value>]")
+            return
+
+        board = None
+        key = None
+        value = self.rhs
+        if "/" in self.lhs:
+            board, key = self.lhs.split("/", 1)
+        else:
+            board = self.lhs
+
+        if key is not None:
+            self.update_config(board, key, value)
+        else:
+            self.display_config(board)
+
+    def update_config(self, board: str, key: str, value: str):
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        op = self.operation(
+            target=b.objects,
+            operation="config_set",
+            kwargs={"board_id": board, "key": key, "value": value},
+        )
+        op.execute()
+        self.op_message(op)
+
+    def display_config(self, abbr: str):
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        op = self.operation(
+            target=b.objects,
+            operation="config_list",
+            kwargs={"board_id": abbr},
+        )
+        op.execute()
+
+        if not op.results.get("success", False):
+            self.op_message(op)
+            return
+
+        if not (data := op.results.get("config", list())):
+            self.msg("No configuration found.")
+            return
+
+        c = op.results.get("board")
+
+        t = self.rich_table("Name", "Description", "Type", "Value",
+                            title=f"'{c['board_id']}: {c['db_key']}' Config Options")
+        for config in data:
+            t.add_row(config["name"], config["description"], config["type"], config["value"])
+        self.buffer.append(t)
+
