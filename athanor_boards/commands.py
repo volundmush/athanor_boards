@@ -277,12 +277,33 @@ class CmdBcLock(_CmdBcBase):
         self.op_message(op)
 
 
-class CmdBcDelete(_CmdBcBase):
-    key = "bcdelete"
-
-
 class _CmdBbBase(AthanorAccountCommand):
     help_category = "BBS"
+
+
+class CmdBbDelete(_CmdBbBase):
+    """
+    Delete a BBS Board.
+
+    Syntax:
+        bbdelete <board id>=<name>
+    """
+    key = "bbdelete"
+
+    def func(self):
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bbdelete <board id>=<name>")
+            return
+
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        op = self.operation(
+            target=b.objects,
+            operation="delete",
+            kwargs={"validate": self.rhs, "board_id": self.lhs},
+        )
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBbCreate(_CmdBbBase):
@@ -324,10 +345,53 @@ class CmdBbCreate(_CmdBbBase):
 
 
 class CmdBbRename(_CmdBbBase):
+    """
+    Renames a BBS Board.
+
+    Syntax:
+        bbrename <board id>=<new name>
+    """
     key = "bbrename"
 
     def func(self):
-        pass
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bbrename <board id>=<new name>")
+            return
+
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        op = self.operation(
+            target=b.objects,
+            operation="rename",
+            kwargs={"name": self.rhs, "board_id": self.lhs},
+        )
+        op.execute()
+        self.op_message(op)
+
+
+class CmdBbOrder(_CmdBbBase):
+    """
+    Changes a board's order ID in its collection.
+
+    Syntax:
+        bborder <board id>=<new order>
+    """
+    key = "bborder"
+
+    def func(self):
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bborder <board id>=<new order>")
+            return
+
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        op = self.operation(
+            target=b.objects,
+            operation="order",
+            kwargs={"order": self.rhs, "board_id": self.lhs},
+        )
+        op.execute()
+        self.op_message(op)
 
 
 class CmdBbPost(_CmdBbBase):
@@ -623,3 +687,69 @@ class CmdBbConfig(_CmdBbBase):
             t.add_row(config["name"], config["description"], config["type"], config["value"])
         self.buffer.append(t)
 
+
+class CmdBbLock(_CmdBbBase):
+    """
+    Alters locks on a BBS Board.
+
+    Syntax:
+        bblock <board id>=<lockstring>
+
+    Lockstrings must be valid Evennia lockstrings.
+    See help lock for more information.
+
+    Locks:
+        read - Who can see the board and its posts.
+        post - Who can post to the board.
+        admin - Who can modify the board.
+            (Moderate, etc.)
+    """
+    key = "bblock"
+
+    def func(self):
+        if not (self.lhs and self.rhs):
+            self.msg("Usage: bblock <board id>=<lockstring>")
+            return
+
+        b = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        board_id = self.lhs.strip()
+
+        op = self.operation(
+            target=b.objects,
+            operation="lock",
+            kwargs={"lockstring": self.rhs, "board_id": board_id},
+        )
+        op.execute()
+        self.op_message(op)
+
+class CmdBbRemove(_CmdBbBase):
+    """
+    Remove a post from a BBS Board.
+
+    Syntax:
+        bbremove <board id>/<post id>
+    """
+    key = "bbremove"
+
+    def func(self):
+        if not self.args:
+            self.msg("Usage: bbremove <board id>/<post id>")
+            return
+
+        if "/" not in self.args:
+            self.msg("Usage: bbremove <board id>/<post id>")
+            return
+
+        board_id, post_id = self.args.split("/", 1)
+        board_id = board_id.strip()
+        post_id = post_id.strip()
+
+        op = self.operation(
+            target=Post.objects,
+            operation="remove",
+            kwargs={"board_id": board_id, "post_id": post_id},
+        )
+        op.execute()
+
+        self.op_message(op)

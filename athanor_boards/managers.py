@@ -6,7 +6,7 @@ from django.db.models.functions import Concat
 from django.conf import settings
 from evennia.typeclasses.managers import TypeclassManager, TypedObjectManager
 from evennia.utils import class_from_module
-
+from evennia.locks.lockhandler import LockException
 from athanor.utils import Operation, validate_name, online_accounts, online_characters, staff_alert, utcnow
 
 _RE_ABBREV = re.compile(r"^[a-zA-Z]{1,10}$")
@@ -126,6 +126,27 @@ class BoardDBManager(TypedObjectManager):
         operation.results = {"success": True, "created": board.serialize(), "message": message}
         staff_alert(message, senders=operation.user)
 
+    def op_rename(self, operation: Operation):
+        board, page = self.find_board(operation)
+        enactor = operation.character or operation.user
+
+        if not board.check_perm(enactor, "admin"):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to rename this board.")
+
+        name = self._validate_name(operation)
+
+        if self.filter(db_key__iexact=name).exclude(id=board).first():
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex(f"A board with the name '{name}' already exists.")
+
+        old_name = board.db_key
+        board.key = name
+        message = f"Board '{board.board_label}: {old_name}' renamed to '{board.board_label}: {board.db_key}'."
+        operation.results = {"success": True, "renamed": name, "message": message}
+        staff_alert(message, senders=operation.user)
+
+
     def op_list(self, operation: Operation):
         output = list()
         enactor = operation.character or operation.user
@@ -146,6 +167,84 @@ class BoardDBManager(TypedObjectManager):
 
         operation.status = operation.st.HTTP_200_OK
         operation.results = {"success": True, "boards": output}
+
+    def op_order(self, operation: Operation):
+        board, page = self.find_board(operation)
+        enactor = operation.character or operation.user
+
+        if not board.check_perm(enactor, "admin"):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to re-order this board.")
+
+        if (order := operation.kwargs.get("order", None)) is None:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("You must provide an order number.")
+
+        try:
+            order = int(order)
+        except ValueError:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("You must provide a valid order number.")
+
+        if board.db_order == order:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("Board is already in that order.")
+
+        if board.collection.boards.filter(db_order=order).first():
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex(f"A board with order {order} already exists.")
+
+        old_order = board.db_order
+        board.db_order = order
+        message = f"Board '{board.board_label}: {board.db_key}' re-ordered from {old_order} to {order}."
+        operation.results = {"success": True, "reordered": order, "message": message}
+
+    def op_lock(self, operation: Operation):
+        board, page = self.find_board(operation)
+        enactor = operation.character or operation.user
+
+        if not board.check_perm(enactor, "admin"):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to lock this board.")
+
+        if not (lock := operation.kwargs.get("lockstring", None)):
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("You must provide a lockstring.")
+
+        try:
+            ok = board.locks.add(lock)
+        except LockException as err:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex(str(err))
+
+        if not ok:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("Lockstring not added.")
+
+        message = f"Board '{board.board_label}: {board.db_key}' locked with '{lock}'."
+        operation.results = {"success": True, "locked": lock, "message": message}
+
+    def op_delete(self, operation: Operation):
+        board, page = self.find_board(operation)
+        enactor = operation.character or operation.user
+
+        if not board.collection.check_perm(enactor, "admin"):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to delete this board.")
+
+        validate = operation.kwargs.get("validate", '')
+
+        if board.posts.count():
+            if validate.lower() != board.db_key.lower():
+                operation.status = operation.st.HTTP_400_BAD_REQUEST
+                raise operation.ex(
+                    f"Board '{board.board_label}: {board.db_key}' still has posts.  You must provide the board name to confirm deletion.")
+
+        board.deleted = True
+
+        message = f"Board '{board.board_label}: {board.db_key}' deleted."
+        operation.results = {"success": True, "board": board.serialize(), "message": message}
+        staff_alert(message, senders=operation.user)
 
 
 class CollectionDBManager(TypedObjectManager):
@@ -220,6 +319,8 @@ class CollectionDBManager(TypedObjectManager):
                 operation.status = operation.st.HTTP_400_BAD_REQUEST
                 raise operation.ex(
                     f"Board Collection '{collection.db_abbreviation}: {collection.db_key}' still has boards.  You must provide the collection name to confirm deletion.")
+
+        collection.deleted = True
 
         message = f"Board Collection '{collection.db_abbreviation}: {collection.db_key}' deleted."
         operation.results = {"success": True, "collection": collection.serialize(), "message": message}
@@ -339,12 +440,22 @@ class CollectionDBManager(TypedObjectManager):
 
         collection = self.find_collection(operation)
 
-    def op_config(self, operation: Operation):
-        if not operation.user.is_admin():
-            operation.status = operation.st.HTTP_401_UNAUTHORIZED
-            raise operation.ex("You do not have permission to config a board collection.")
+        if not (lock := operation.kwargs.get("lockstring", None)):
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("You must provide a lockstring.")
 
-        collection = self.find_collection(operation)
+        try:
+            ok = collection.locks.add(lock)
+        except LockException as err:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex(str(err))
+
+        if not ok:
+            operation.status = operation.st.HTTP_400_BAD_REQUEST
+            raise operation.ex("Lockstring not added.")
+
+        message = f"Board Collection '{collection.db_abbreviation}: {collection.db_key}' locked with '{lock}'."
+        operation.results = {"success": True, "locked": lock, "message": message}
 
     def op_list(self, operation: Operation):
         if not operation.user.is_admin():
@@ -568,3 +679,24 @@ class PostManager(models.Manager):
 
         operation.results = {"success": True, "board": board.serialize(), "page": page, "pages": pages,
                              "posts": serialized}
+
+    def op_remove(self, operation: Operation):
+        enactor = operation.character or operation.user
+
+        c = class_from_module(settings.BASE_BOARD_TYPECLASS)
+
+        board, page = c.objects.find_board(operation)
+        if not (board.access(enactor, "post") or board.access(enactor, "admin")):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to post to this board.")
+
+        post = self.find_post(operation, board)
+
+        if not (post.user == operation.user or post.character == operation.character) or board.access(enactor, "admin"):
+            operation.status = operation.st.HTTP_401_UNAUTHORIZED
+            raise operation.ex("You do not have permission to remove this post.")
+
+        post.deleted = True
+        post.save()
+
+        operation.results = {"success": True, "board": board.serialize(), "post": post.serialize(operation.user, character=operation.character)}
