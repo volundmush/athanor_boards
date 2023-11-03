@@ -79,8 +79,11 @@ class Post(models.Model):
 
     def render_author(self, user, character=None, known_admin: bool = None):
         if known_admin is None:
-            admin = (self.user == user) or (character and (self.character == character)) or self.board.access(user,
-                                                                                                              "admin")
+            admin = (
+                (self.user == user)
+                or (character and (self.character == character))
+                or self.board.access(user, "admin")
+            )
         else:
             admin = known_admin
         poster = self.character or self.user
@@ -108,8 +111,11 @@ class Post(models.Model):
 
         enactor = character or user
 
-        admin = (self.user == user) or (character and (self.character == character)) or self.board.access(enactor,
-                                                                                                          "admin")
+        admin = (
+            (self.user == user)
+            or (character and (self.character == character))
+            or self.board.access(enactor, "admin")
+        )
         if admin:
             data["character_id"] = self.character.id if self.character else None
             data["character_name"] = self.character.key if self.character else None
@@ -117,6 +123,8 @@ class Post(models.Model):
             data["user_name"] = self.user.key
             data["disguise"] = self.disguise
 
-        data["author"] = self.render_author(user, character=character, known_admin=admin)
+        data["author"] = self.render_author(
+            user, character=character, known_admin=admin
+        )
 
         return data

@@ -56,6 +56,7 @@ class CmdBcDelete(_CmdBcBase):
 
     WARNING: This will delete all boards and posts in the collection. There is no undo.
     """
+
     key = "bcdelete"
 
     def func(self):
@@ -100,7 +101,9 @@ class CmdBcList(_CmdBcBase):
             self.msg("No collections found.")
             return
 
-        t = self.rich_table("ID", "Abbr", "Name", "Locks", title="BBS Board Collections")
+        t = self.rich_table(
+            "ID", "Abbr", "Name", "Locks", title="BBS Board Collections"
+        )
         for collection in data:
             t.add_row(
                 str(collection["id"]),
@@ -151,6 +154,7 @@ class CmdBcConfig(_CmdBcBase):
     If no key is provided, the current configuration will be displayed.
     If a key is provided, the configuration will be updated.
     """
+
     key = "bcconfig"
 
     def func(self):
@@ -205,10 +209,17 @@ class CmdBcConfig(_CmdBcBase):
 
         c = op.results.get("collection")
 
-        t = self.rich_table("Name", "Description", "Type", "Value",
-                            title=f"'{c['db_abbreviation']}: {c['db_key']}' Config Options")
+        t = self.rich_table(
+            "Name",
+            "Description",
+            "Type",
+            "Value",
+            title=f"'{c['db_abbreviation']}: {c['db_key']}' Config Options",
+        )
         for config in data:
-            t.add_row(config["name"], config["description"], config["type"], config["value"])
+            t.add_row(
+                config["name"], config["description"], config["type"], config["value"]
+            )
         self.buffer.append(t)
 
 
@@ -256,6 +267,7 @@ class CmdBcLock(_CmdBcBase):
         admin - Who can modify the collection.
             (Add/Delete/Rename boards, etc.)
     """
+
     key = "bclock"
 
     def func(self):
@@ -288,6 +300,7 @@ class CmdBbDelete(_CmdBbBase):
     Syntax:
         bbdelete <board id>=<name>
     """
+
     key = "bbdelete"
 
     def func(self):
@@ -313,6 +326,7 @@ class CmdBbCreate(_CmdBbBase):
     Syntax:
         bbcreate <collection abbreviation>[/<order>]=<name>
     """
+
     key = "bbcreate"
 
     def func(self):
@@ -351,6 +365,7 @@ class CmdBbRename(_CmdBbBase):
     Syntax:
         bbrename <board id>=<new name>
     """
+
     key = "bbrename"
 
     def func(self):
@@ -376,6 +391,7 @@ class CmdBbOrder(_CmdBbBase):
     Syntax:
         bborder <board id>=<new order>
     """
+
     key = "bborder"
 
     def func(self):
@@ -433,6 +449,7 @@ class CmdBbReply(_CmdBbBase):
     Syntax:
         bbreply <board id>/<post id>=<message>
     """
+
     key = "bbreply"
 
     def func(self):
@@ -465,6 +482,7 @@ class CmdBbList(_CmdBbBase):
     Syntax:
         bblist
     """
+
     key = "bblist"
 
     def func(self):
@@ -508,6 +526,7 @@ class CmdBbRead(_CmdBbBase):
     If a board id is provided, a list of all posts on that board will be displayed.
     If a post id is provided, the post will be displayed.
     """
+
     key = "bbread"
 
     def list_all_boards(self):
@@ -532,15 +551,23 @@ class CmdBbRead(_CmdBbBase):
             board_collections[board["collection_name"]].append(board)
 
         for collection, boards in board_collections.items():
-            t = self.rich_table("ID", "Name", "Last Post", "#Msg", "#Unr", "Perm", title=collection)
+            t = self.rich_table(
+                "ID", "Name", "Last Post", "#Msg", "#Unr", "Perm", title=collection
+            )
             for board in boards:
                 perm = "R" if board["read_perm"] else " "
                 perm += "P" if board["post_perm"] else " "
                 perm += "A" if board["admin_perm"] else " "
-                t.add_row(str(board["board_id"]), board["db_key"],
-                          self.account.datetime_format(board["db_last_activity"], template="%b %d %Y"),
-                          str(board["post_count"]),
-                          str(board["unread_count"]), perm)
+                t.add_row(
+                    str(board["board_id"]),
+                    board["db_key"],
+                    self.account.datetime_format(
+                        board["db_last_activity"], template="%b %d %Y"
+                    ),
+                    str(board["post_count"]),
+                    str(board["unread_count"]),
+                    perm,
+                )
             self.buffer.append(t)
 
     def list_board_posts(self):
@@ -564,16 +591,25 @@ class CmdBbRead(_CmdBbBase):
         pages = op.results.get("pages")
 
         page_display = f"(Page {page} of {pages})"
-        t = self.rich_table("ID", "Rd", "Subject", "Date", "Author",
-                            title=f"{board['collection_name']} Board {board['board_id']}: {board['db_key']} {page_display}", )
+        t = self.rich_table(
+            "ID",
+            "Rd",
+            "Subject",
+            "Date",
+            "Author",
+            title=f"{board['collection_name']} Board {board['board_id']}: {board['db_key']} {page_display}",
+        )
         for post in data:
-            t.add_row(f"{post['board_id']}/{post['post_number']}", 'Y' if post["read"] else 'N',
-                      post["subject"], self.account.datetime_format(post["date_created"], template="%b %d %Y"),
-                      post["author"])
+            t.add_row(
+                f"{post['board_id']}/{post['post_number']}",
+                "Y" if post["read"] else "N",
+                post["subject"],
+                self.account.datetime_format(post["date_created"], template="%b %d %Y"),
+                post["author"],
+            )
         self.buffer.append(t)
 
     def func(self):
-
         if not self.args:
             self.list_all_boards()
             return
@@ -604,19 +640,21 @@ class CmdBbRead(_CmdBbBase):
         t = self.rich_table(
             title=f"{post['board_name']} Board Post {post['board_id']}/{post['post_number']}: {post['subject']}",
             show_lines=True,
-            show_header=False)
+            show_header=False,
+        )
         t.add_column()
 
         header = list()
         # we want the header to be lines of relevant information...
         header.append(f"{'Author:':>7} {post['author']:<20}")
-        header.append(f"{'Date:':>7} {self.account.datetime_format(post['date_created'], template='%c'):<20}")
+        header.append(
+            f"{'Date:':>7} {self.account.datetime_format(post['date_created'], template='%c'):<20}"
+        )
 
         t.add_row("\n".join(header))
         t.add_row(post["body"])
 
         self.buffer.append(t)
-
 
 
 class CmdBbConfig(_CmdBbBase):
@@ -630,6 +668,7 @@ class CmdBbConfig(_CmdBbBase):
     If no key is provided, the current configuration will be displayed.
     If a key is provided, the configuration will be updated.
     """
+
     key = "bbconfig"
 
     def func(self):
@@ -681,10 +720,17 @@ class CmdBbConfig(_CmdBbBase):
 
         c = op.results.get("board")
 
-        t = self.rich_table("Name", "Description", "Type", "Value",
-                            title=f"'{c['board_id']}: {c['db_key']}' Config Options")
+        t = self.rich_table(
+            "Name",
+            "Description",
+            "Type",
+            "Value",
+            title=f"'{c['board_id']}: {c['db_key']}' Config Options",
+        )
         for config in data:
-            t.add_row(config["name"], config["description"], config["type"], config["value"])
+            t.add_row(
+                config["name"], config["description"], config["type"], config["value"]
+            )
         self.buffer.append(t)
 
 
@@ -704,6 +750,7 @@ class CmdBbLock(_CmdBbBase):
         admin - Who can modify the board.
             (Moderate, etc.)
     """
+
     key = "bblock"
 
     def func(self):
@@ -723,6 +770,7 @@ class CmdBbLock(_CmdBbBase):
         op.execute()
         self.op_message(op)
 
+
 class CmdBbRemove(_CmdBbBase):
     """
     Remove a post from a BBS Board.
@@ -730,6 +778,7 @@ class CmdBbRemove(_CmdBbBase):
     Syntax:
         bbremove <board id>/<post id>
     """
+
     key = "bbremove"
 
     def func(self):

@@ -2,11 +2,12 @@ from django.conf import settings
 from evennia.typeclasses.models import TypeclassBase
 from evennia.utils.utils import lazy_property
 from evennia.utils.optionhandler import OptionHandler
+from athanor.typeclasses.mixin import AthanorAccess
 from .managers import BoardManager, CollectionManager
 from .models import BoardDB, BoardCollectionDB, Post
 
 
-class DefaultBoardCollection(BoardCollectionDB, metaclass=TypeclassBase):
+class DefaultBoardCollection(AthanorAccess, BoardCollectionDB, metaclass=TypeclassBase):
     system_name = "BBS"
     objects = CollectionManager()
     init_locks = "read:all();admin:perm(Admin)"
@@ -34,13 +35,19 @@ class DefaultBoardCollection(BoardCollectionDB, metaclass=TypeclassBase):
             load_kwargs={"category": "option"},
         )
 
-    def check_perm(self, enactor, perm):
-        if perm != "admin":
-            return self.access(enactor, perm) or self.access(enactor, "admin") or enactor.is_admin()
-        return self.access(enactor, perm) or enactor.is_admin()
+    def check_override(self, accessing_obj):
+        return accessing_obj.locks.check_lockstring(
+            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
+        )
+
+    def access_check_read(self, accessing_obj, **kwargs):
+        return self.check_override(accessing_obj) or self.access(accessing_obj, "admin")
+
+    def access_check_admin(self, accessing_obj, **kwargs):
+        return self.check_override(accessing_obj)
 
 
-class DefaultBoard(BoardDB, metaclass=TypeclassBase):
+class DefaultBoard(AthanorAccess, BoardDB, metaclass=TypeclassBase):
     system_name = "BBS"
     objects = BoardManager()
 
@@ -76,9 +83,16 @@ class DefaultBoard(BoardDB, metaclass=TypeclassBase):
             load_kwargs={"category": "option"},
         )
 
-    def check_perm(self, enactor, perm):
-        if self.collection.access(enactor, "admin"):
-            return True
-        if perm != "admin":
-            return self.access(enactor, perm) or self.access(enactor, "admin") or enactor.is_admin()
-        return self.access(enactor, perm) or enactor.is_admin()
+    def check_override(self, accessing_obj):
+        return self.collection.check_override(accessing_obj)
+
+    def access_check_read(self, accessing_obj, **kwargs):
+        return self.check_override(accessing_obj) or self.access(accessing_obj, "admin")
+
+    def access_check_post(self, accessing_obj, **kwargs):
+        return self.check_override(accessing_obj) or self.access(accessing_obj, "admin")
+
+    def access_check_admin(self, accessing_obj, **kwargs):
+        return self.check_override(accessing_obj) or self.collection.access(
+            accessing_obj, "admin"
+        )
