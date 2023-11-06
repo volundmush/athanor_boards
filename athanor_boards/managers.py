@@ -144,7 +144,7 @@ class BoardDBManager(TypedObjectManager):
 
         name = self._validate_name(operation)
 
-        if self.model.objects.filter(db_key__iexact=name).first():
+        if self.filter(db_key__iexact=name).first():
             operation.status = operation.st.HTTP_400_BAD_REQUEST
             raise operation.ex(f"A board with the name '{name}' already exists.")
 
@@ -329,7 +329,7 @@ class CollectionDBManager(TypedObjectManager):
 
         name = self._validate_name(operation)
 
-        if self.model.objects.filter(db_key__iexact=name).first():
+        if self.filter(db_key__iexact=name).first():
             operation.status = operation.st.HTTP_400_BAD_REQUEST
             raise operation.ex(
                 f"A board collection with the name '{name}' already exists."
@@ -337,7 +337,7 @@ class CollectionDBManager(TypedObjectManager):
 
         abbreviation = self._validate_abbreviation(operation)
 
-        if self.model.objects.filter(db_abbreviation__iexact=abbreviation).first():
+        if self.filter(db_abbreviation__iexact=abbreviation).first():
             operation.status = operation.st.HTTP_400_BAD_REQUEST
             raise operation.ex(
                 f"A board collection with the abbreviation '{abbreviation}' already exists."
