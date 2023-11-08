@@ -8,8 +8,6 @@ def init(settings, plugins: dict):
         "athanor_boards.boards.DefaultBoardCollection"
     )
 
-    settings.AT_SERVER_STARTSTOP_MODULE.append("athanor_boards.startup_hooks")
-
     settings.BASE_BOARD_TYPECLASS = "athanor_boards.boards.DefaultBoard"
     settings.INSTALLED_APPS.append("athanor_boards")
 
@@ -34,3 +32,5 @@ def init(settings, plugins: dict):
     settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE = "perm(Developer)"
 
     athanor.BOARD_ACCESS_FUNCTIONS = defaultdict(list)
+
+    settings.ACCESS_FUNCTIONS_LIST.append("BOARD")

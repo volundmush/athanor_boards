@@ -153,7 +153,7 @@ class BoardDBManager(TypedObjectManager):
         message = f"Board '{board.board_label}: {board.db_key}' created."
         operation.results = {
             "success": True,
-            "created": board.serialize(),
+            "board": board,
             "message": message,
         }
         staff_alert(message, senders=operation.user)
@@ -290,6 +290,11 @@ class BoardDBManager(TypedObjectManager):
 class CollectionDBManager(TypedObjectManager):
     system_name = "BBS"
 
+    def check_override(self, accessing_obj):
+        return accessing_obj.locks.check_lockstring(
+            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
+        )
+
     def prepare_kwargs(self, operation: Operation):
         pass
 
@@ -319,9 +324,7 @@ class CollectionDBManager(TypedObjectManager):
         return name
 
     def op_create(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex(
                 "You do not have permission to create a board collection."
@@ -354,9 +357,7 @@ class CollectionDBManager(TypedObjectManager):
         staff_alert(message, senders=operation.user)
 
     def op_delete(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex(
                 "You do not have permission to delete a board collection."
@@ -464,9 +465,7 @@ class CollectionDBManager(TypedObjectManager):
         raise operation.ex(f"No board collection found with ID {collection_id}.")
 
     def op_rename(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex(
                 "You do not have permission to rename a board collection."
@@ -489,9 +488,7 @@ class CollectionDBManager(TypedObjectManager):
         staff_alert(message, senders=operation.user)
 
     def op_abbreviate(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex(
                 "You do not have permission to re-abbreviate a board collection."
@@ -522,9 +519,7 @@ class CollectionDBManager(TypedObjectManager):
         staff_alert(message, senders=operation.user)
 
     def op_lock(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex("You do not have permission to lock a board collection.")
 
@@ -548,9 +543,7 @@ class CollectionDBManager(TypedObjectManager):
         operation.results = {"success": True, "locked": lock, "message": message}
 
     def op_list(self, operation: Operation):
-        if not operation.actor.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        ):
+        if not self.check_override(operation.actor):
             operation.status = operation.st.HTTP_401_UNAUTHORIZED
             raise operation.ex("You do not have permission to list board collections.")
 

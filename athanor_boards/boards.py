@@ -36,9 +36,7 @@ class DefaultBoardCollection(AthanorAccess, BoardCollectionDB, metaclass=Typecla
         )
 
     def check_override(self, accessing_obj):
-        return accessing_obj.locks.check_lockstring(
-            self, settings.BOARD_PERMISSIONS_ADMIN_OVERRIDE
-        )
+        return self.__class__.objects.check_override(accessing_obj)
 
     def access_check_read(self, accessing_obj, **kwargs):
         return self.check_override(accessing_obj) or self.access(accessing_obj, "admin")
