@@ -7,18 +7,6 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    replaces = [
-        ("athanor_boards", "0001_initial"),
-        (
-            "athanor_boards",
-            "0002_alter_boarddb_options_alter_boarddb_db_last_activity_and_more",
-        ),
-        (
-            "athanor_boards",
-            "0003_boardcollectiondb_db_deleted_boarddb_db_deleted_and_more",
-        ),
-    ]
-
     initial = True
 
     dependencies = [
